@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FHIR Clinical Viewer</title>
+<style>
+  :root{ --navy:#1f3864; --line:#e2e6ee; --bg:#f6f8fc; --muted:#667; }
+  *{ box-sizing:border-box; }
+  body{ font-family:-apple-system,"Segoe UI",Roboto,sans-serif; margin:0; color:#222; background:#fff; }
+  header{ background:var(--navy); color:#fff; padding:18px 24px; }
+  header h1{ margin:0; font-size:20px; }
+  header p{ margin:4px 0 0; font-size:13px; opacity:.85; }
+  .wrap{ display:flex; gap:0; height:calc(100vh - 78px); }
+  .list{ width:300px; border-right:1px solid var(--line); overflow-y:auto; background:var(--bg); }
+  .list h2, .detail h2{ font-size:13px; text-transform:uppercase; letter-spacing:.05em; color:var(--muted); padding:14px 16px 6px; margin:0; }
+  .pt{ padding:10px 16px; cursor:pointer; border-bottom:1px solid var(--line); font-size:14px; }
+  .pt:hover{ background:#eaf0fb; }
+  .pt.active{ background:#dbe6fb; font-weight:600; }
+  .pt small{ display:block; color:var(--muted); font-weight:400; }
+  .detail{ flex:1; overflow-y:auto; padding:0 24px 24px; }
+  .card{ background:var(--bg); border:1px solid var(--line); border-radius:10px; padding:14px 18px; margin-top:8px; }
+  table{ width:100%; border-collapse:collapse; margin-top:8px; font-size:14px; }
+  th,td{ text-align:left; padding:8px 10px; border-bottom:1px solid var(--line); }
+  th{ font-size:12px; text-transform:uppercase; color:var(--muted); }
+  .code{ font-family:ui-monospace,Consolas,monospace; }
+  .icd{ font-weight:700; color:var(--navy); }
+  .med{ font-weight:600; color:#1a7f4b; }
+  .none{ color:#c0392b; font-style:italic; }
+  .hint{ color:var(--muted); font-size:13px; margin-top:40px; text-align:center; }
+</style>
+</head>
+<body>
+<header>
+  <h1>FHIR Clinical Viewer</h1>
+  <p>Reads patient records from a FHIR server and translates SNOMED CT diagnoses to ICD-10</p>
+</header>
+<div class="wrap">
+  <div class="list">
+    <h2>Patients</h2>
+    <div id="patients"></div>
+  </div>
+  <div class="detail">
+    <div id="detail"><p class="hint">← Select a patient to view their diagnoses</p></div>
+  </div>
+</div>
+
+<script>
+async function loadPatients(){
+  const res = await fetch('/patients?count=15');
+  const patients = await res.json();
+  const box = document.getElementById('patients');
+  box.innerHTML = '';
+  patients.forEach(p => {
+    const div = document.createElement('div');
+    div.className = 'pt';
+    div.innerHTML = `${p.name}<small>${p.gender || ''} · ${p.birthDate || ''}</small>`;
+    div.onclick = () => { document.querySelectorAll('.pt').forEach(x=>x.classList.remove('active')); div.classList.add('active'); loadPatient(p.id); };
+    box.appendChild(div);
+  });
+}
+
+async function loadPatient(id){
+  const detail = document.getElementById('detail');
+  detail.innerHTML = '<p class="hint">Loading…</p>';
+  const res = await fetch('/patients/' + id);
+  const p = await res.json();
+  let rows = p.conditions.map(c => `
+    <tr>
+      <td class="code">${c.snomed_code || ''}</td>
+      <td>${c.display || ''}</td>
+      <td class="icd ${c.icd10_code.includes('no mapping') ? 'none' : ''}">${c.icd10_code}</td>
+      <td class="${c.recommended_medication.includes('no recommendation') ? 'none' : 'med'}">${c.recommended_medication}</td>
+    </tr>`).join('');
+  if(!rows) rows = '<tr><td colspan="4" class="none">No conditions recorded</td></tr>';
+  detail.innerHTML = `
+    <h2>Patient</h2>
+    <div class="card"><b>${p.name}</b> &nbsp; ${p.gender || ''} &nbsp; born ${p.birthDate || ''}</div>
+    <h2>Clinical Pipeline — Diagnosis → ICD-10 → Recommended Medication</h2>
+    <table>
+      <thead><tr><th>SNOMED code</th><th>Diagnosis</th><th>ICD-10</th><th>Recommended medication</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+    <p class="hint" style="text-align:left;margin-top:14px;font-size:12px;">Medication recommendations are illustrative only — not clinical advice.</p>`;
+}
+
+loadPatients();
+</script>
+</body>
+</html>
